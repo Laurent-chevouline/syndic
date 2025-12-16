@@ -7,4 +7,4 @@ if [ -f "setup.py" ]; then
     pip install --no-cache-dir -e .
 fi
 cd /app
-exec python -m waitress --port=${PORT}
+exec python -m waitress --listen=0.0.0.0:${PORT} diacamma.wsgi:application
