@@ -1,5 +1,3 @@
-# railway.json - Configuration explicite pour Railway
-
 {
   "build": {
     "builder": "dockerfile"
