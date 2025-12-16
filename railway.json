@@ -1,0 +1,12 @@
+# railway.json - Configuration explicite pour Railway
+
+{
+  "build": {
+    "builder": "dockerfile"
+  },
+  "deploy": {
+    "startCommand": "/app/start.sh",
+    "restartPolicyMaxRetries": 5,
+    "restartPolicyWindowMs": 60000
+  }
+}
