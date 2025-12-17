@@ -3,6 +3,7 @@ Diacamma WSGI application for Railway
 """
 import os
 import sys
+sys.path.insert(0, '/app')
 
 # Setup Django
 from django.conf import settings
