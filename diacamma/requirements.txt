@@ -1,0 +1,4 @@
+lucterios
+diacamma
+gunicorn
+psycopg2-binary
