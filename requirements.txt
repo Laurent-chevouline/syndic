@@ -1,4 +1,4 @@
 lucterios
-diacamma
+# -e ./diacamma
 gunicorn
 psycopg2-binary
