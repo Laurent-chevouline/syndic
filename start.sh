@@ -7,6 +7,7 @@ if [ -f "setup.py" ]; then
     pip install --no-cache-dir -e .
 fi
 cd /app
-# Lucterios WSGI via runserver (development-friendly) or gunicorn (production)
-exec python -m waitress --listen=0.0.0.0:${PORT} \
-    lucterios.wsgi:application
+# Set Django settings module - Lucterios uses lucterios.settings
+export DJANGO_SETTINGS_MODULE=lucterios.settings
+# Use waitress with correct syntax
+exec python -m waitress --listen=0.0.0.0:${PORT} diacamma.wsgi:application
