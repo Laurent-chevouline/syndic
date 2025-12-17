@@ -1,32 +1,35 @@
 #!/bin/bash
 
-# 1. Préparation des dossiers persistants
+# Préparation
 mkdir -p /data/lucterios/var
 mkdir -p /data/lucterios/conf
 
-# 2. Localisation dynamique des exécutables (Car on ne sait pas où pip les a mis)
-# On cherche le fichier 'lucterios_init' dans tout le système
-INIT_CMD=$(find /usr /home -name "lucterios_init" -type f -executable | head -n 1)
-SERVICE_CMD=$(find /usr /home -name "lucterios_service" -type f -executable | head -n 1)
+echo "--- Debuggage des chemins ---"
+# On demande à python où est installé lucterios
+LOCATION=$(python3 -c "import lucterios; import os; print(os.path.dirname(lucterios.__file__))")
+echo "Lucterios est installé dans : $LOCATION"
 
-# Fallback : Si non trouvés, on tente via python -m si le package est 'lucterios' tout court
-if [ -z "$INIT_CMD" ]; then
-    echo "Exécutables non trouvés via find, essai via module python..."
-    # Note: On essaie 'lucterios' tout court car 'lucterios.framework' semble incorrect
-    INIT_CMD="python3 -m lucterios init"
-    SERVICE_CMD="python3 -m lucterios run"
+# On construit le chemin vers le script de service
+# La structure classique est lucterios/framework/service.py
+SERVICE_SCRIPT="$LOCATION/framework/service.py"
+INIT_SCRIPT="$LOCATION/framework/manage.py"
+
+echo "Script de service cible : $SERVICE_SCRIPT"
+
+if [ ! -f "$SERVICE_SCRIPT" ]; then
+    echo "ERREUR CRITIQUE: Impossible de trouver le script service.py dans $LOCATION"
+    # Plan C : chercher n'importe quel fichier service.py dans le dossier lucterios
+    SERVICE_SCRIPT=$(find $LOCATION -name "service.py" | head -n 1)
+    echo "Recherche alternative trouvée : $SERVICE_SCRIPT"
 fi
 
-echo "Commande d'init trouvée : $INIT_CMD"
-echo "Commande de service trouvée : $SERVICE_CMD"
-
-# 3. Initialisation (si conf absente)
+# Initialisation
 if [ ! -f "/data/lucterios/conf/lucterios.xml" ]; then
     echo "Initialisation de la configuration..."
-    $INIT_CMD --root /data/lucterios
+    # On appelle le script python directement
+    python3 "$INIT_SCRIPT" init --root /data/lucterios
 fi
 
-# 4. Lancement du serveur
-echo "Démarrage du serveur Lucterios sur le port ${PORT:-8100}..."
-# On utilise 'exec' pour que le processus prenne le PID 1
-exec $SERVICE_CMD --root /data/lucterios run --port ${PORT:-8100} --interface 0.0.0.0
+echo "Démarrage du serveur..."
+# Lancement direct du fichier python
+exec python3 "$SERVICE_SCRIPT" --root /data/lucterios run --port ${PORT:-8100} --interface 0.0.0.0
