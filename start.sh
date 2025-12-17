@@ -7,4 +7,6 @@ if [ -f "setup.py" ]; then
     pip install --no-cache-dir -e .
 fi
 cd /app
-exec python -m waitress --listen=0.0.0.0:${PORT} diacamma.wsgi:application
+# Lucterios WSGI via runserver (development-friendly) or gunicorn (production)
+exec python -m waitress --listen=0.0.0.0:${PORT} \
+    lucterios.wsgi:application
