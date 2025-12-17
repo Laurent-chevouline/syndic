@@ -1,64 +1,41 @@
 #!/bin/bash
 
-# 1. Préparation des dossiers
-mkdir -p /data/lucterios/var
-mkdir -p /data/lucterios/conf
-mkdir -p /data/lucterios/media
-mkdir -p /data/lucterios/static
+# 1. Dossiers
+mkdir -p /data/lucterios/var /data/lucterios/conf /data/lucterios/static /data/lucterios/media
 
-# 2. Génération de lucterios.xml (Si absent)
-CONF_FILE="/data/lucterios/conf/lucterios.xml"
-if [ ! -f "$CONF_FILE" ]; then
-    echo "Création du fichier de configuration par défaut..."
-    cat <<EOF > $CONF_FILE
-<?xml version="1.0" encoding="UTF-8"?>
-<lucterios>
-    <database>
-        <engine>django.db.backends.sqlite3</engine>
-        <name>/data/lucterios/var/db.sqlite3</name>
-    </database>
-    <general>
-        <language>fr</language>
-        <timezone>Europe/Paris</timezone>
-        <url_root>/</url_root>
-    </general>
-    <modules>
-        <module>lucterios.framework</module>
-        <module>diacamma.syndic</module>
-    </modules>
-</lucterios>
-EOF
-fi
-
-# 3. Patch critique pour l'erreur ROOT_URLCONF
-# On crée un petit script Python qui va initialiser Django correctement avant de lancer Gunicorn
-# Ce script force le chargement de la conf Lucterios
-cat <<EOF > /app/wsgi_launcher.py
+# 2. Création d'un module settings local qui surcharge tout
+cat <<EOF > /app/local_settings.py
 import os
-import sys
-from django.core.wsgi import get_wsgi_application
+from lucterios.framework.settings import *
 
-# Configuration de l'environnement
-os.environ.setdefault("LUCTERIOS_ROOT", "/data/lucterios")
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "lucterios.framework.settings")
+# On force la configuration qui manque
+ROOT_URLCONF = 'lucterios.framework.urls'
+WSGI_APPLICATION = 'lucterios.framework.wsgi.application'
 
-# On force l'import du gestionnaire de config Lucterios
-try:
-    from lucterios.framework.database import DatabaseConfig
-    # On force le rechargement de la config depuis le XML
-    db_conf = DatabaseConfig('/data/lucterios')
-    if not os.path.exists(db_conf.config_filename):
-        print("Attention: Fichier de conf introuvable à", db_conf.config_filename)
-except ImportError:
-    print("Impossible d'importer DatabaseConfig")
+# Configuration DB forcée (SQLite pour commencer)
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': '/data/lucterios/var/db.sqlite3',
+    }
+}
 
-application = get_wsgi_application()
+# Configuration Lucterios forcée
+LUCTERIOS_ROOT = '/data/lucterios'
+INSTALLED_APPS += ['diacamma.syndic'] # ou diacamma.asso
+ALLOWED_HOSTS = ['*']
+DEBUG = True # Pour voir les erreurs détaillées à l'écran
 EOF
 
-echo "--- Démarrage Gunicorn via Launcher Custom ---"
-# On lance Gunicorn sur notre launcher custom plutôt que sur le module framework direct
-# Cela garantit que nos hacks d'initialisation sont exécutés
-exec gunicorn wsgi_launcher:application \
+echo "--- Démarrage avec Settings Forcés ---"
+
+# 3. Migration (si possible)
+export DJANGO_SETTINGS_MODULE=local_settings
+python3 -c "import django; django.setup(); from django.core.management import call_command; call_command('migrate')" || echo "Migrate failed"
+
+# 4. Lancement Gunicorn
+exec gunicorn lucterios.framework.wsgi:application \
     --bind 0.0.0.0:${PORT:-8100} \
     --workers 2 \
-    --timeout 120
+    --timeout 120 \
+    --env DJANGO_SETTINGS_MODULE=local_settings
