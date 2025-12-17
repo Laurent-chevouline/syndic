@@ -1,54 +1,64 @@
 #!/bin/bash
 
-# 1. Dossiers
+# 1. Préparation des dossiers
 mkdir -p /data/lucterios/var
 mkdir -p /data/lucterios/conf
 mkdir -p /data/lucterios/media
 mkdir -p /data/lucterios/static
 
-# 2. Création FORCÉE de la configuration minimale
-# C'est ce fichier qui dit à Lucterios "Charge le module Diacamma Asso/Syndic"
-if [ ! -f "/data/lucterios/conf/lucterios.xml" ]; then
-    echo "Génération manuelle de lucterios.xml..."
-    cat <<EOF > /data/lucterios/conf/lucterios.xml
+# 2. Génération de lucterios.xml (Si absent)
+CONF_FILE="/data/lucterios/conf/lucterios.xml"
+if [ ! -f "$CONF_FILE" ]; then
+    echo "Création du fichier de configuration par défaut..."
+    cat <<EOF > $CONF_FILE
 <?xml version="1.0" encoding="UTF-8"?>
 <lucterios>
     <database>
-        <!-- Utilisation de SQLite par défaut pour le premier boot -->
-        <!-- Vous pourrez changer ça pour Postgres via l'interface plus tard -->
         <engine>django.db.backends.sqlite3</engine>
         <name>/data/lucterios/var/db.sqlite3</name>
     </database>
     <general>
         <language>fr</language>
-        <timezone>Pacific/Tahiti</timezone>
+        <timezone>Europe/Paris</timezone>
+        <url_root>/</url_root>
     </general>
     <modules>
-        <!-- On active le module de base -->
-        <!-- Si vous utilisez diacamma-asso, mettez 'diacamma.asso' -->
-        <!-- Si vous utilisez diacamma-syndic, mettez 'diacamma.syndic' -->
         <module>lucterios.framework</module>
-        <module>diacamma.syndic</module> 
+        <module>diacamma.syndic</module>
     </modules>
 </lucterios>
 EOF
 fi
 
-# 3. Injection des variables d'environnement
-export LUCTERIOS_ROOT=/data/lucterios
-export DJANGO_SETTINGS_MODULE=lucterios.framework.settings
-export PYTHONUNBUFFERED=1
+# 3. Patch critique pour l'erreur ROOT_URLCONF
+# On crée un petit script Python qui va initialiser Django correctement avant de lancer Gunicorn
+# Ce script force le chargement de la conf Lucterios
+cat <<EOF > /app/wsgi_launcher.py
+import os
+import sys
+from django.core.wsgi import get_wsgi_application
 
-# 4. Migration DB (Essentiel pour créer les tables auth/django)
-echo "--- Tentative de migration DB ---"
-# On utilise python -m car les binaires sont introuvables
-python3 -m lucterios.framework.manage migrate --noinput || echo "Migration échouée, on continue..."
+# Configuration de l'environnement
+os.environ.setdefault("LUCTERIOS_ROOT", "/data/lucterios")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "lucterios.framework.settings")
 
-# 5. Démarrage
-echo "--- Démarrage Gunicorn ---"
-exec gunicorn lucterios.framework.wsgi:application \
+# On force l'import du gestionnaire de config Lucterios
+try:
+    from lucterios.framework.database import DatabaseConfig
+    # On force le rechargement de la config depuis le XML
+    db_conf = DatabaseConfig('/data/lucterios')
+    if not os.path.exists(db_conf.config_filename):
+        print("Attention: Fichier de conf introuvable à", db_conf.config_filename)
+except ImportError:
+    print("Impossible d'importer DatabaseConfig")
+
+application = get_wsgi_application()
+EOF
+
+echo "--- Démarrage Gunicorn via Launcher Custom ---"
+# On lance Gunicorn sur notre launcher custom plutôt que sur le module framework direct
+# Cela garantit que nos hacks d'initialisation sont exécutés
+exec gunicorn wsgi_launcher:application \
     --bind 0.0.0.0:${PORT:-8100} \
     --workers 2 \
-    --timeout 120 \
-    --env DJANGO_SETTINGS_MODULE=lucterios.framework.settings \
-    --env LUCTERIOS_ROOT=/data/lucterios
+    --timeout 120
