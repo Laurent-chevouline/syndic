@@ -1,40 +1,30 @@
 #!/bin/bash
 
-# 1. Création des dossiers
+# 1. Dossiers
 mkdir -p /data/lucterios/var
 mkdir -p /data/lucterios/conf
+mkdir -p /data/lucterios/media
+mkdir -p /data/lucterios/static
 
-# 2. On recrée un manage.py minimaliste pour lancer Lucterios
-# C'est ce qui manque dans le package pip
-cat <<EOF > /app/manage.py
-#!/usr/bin/env python
-import os
-import sys
+# 2. Variables d'environnement CRITIQUES pour Lucterios
+export LUCTERIOS_ROOT=/data/lucterios
+export DJANGO_SETTINGS_MODULE=lucterios.framework.settings
+export PYTHONUNBUFFERED=1
 
-if __name__ == "__main__":
-    # Configuration par défaut pour Lucterios
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "lucterios.framework.settings")
-    
-    # On force le chemin des fichiers de conf
-    os.environ.setdefault("LUCTERIOS_ROOT", "/data/lucterios")
-
-    from django.core.management import execute_from_command_line
-    execute_from_command_line(sys.argv)
-EOF
-
-chmod +x /app/manage.py
+# 3. Création d'un fichier de configuration DB minimal si absent
+# Lucterios a besoin de savoir où taper. Par défaut il utilise souvent SQLite dans var/
+# On force un fichier de config lucterios.ini si besoin, mais normalement l'env suffit.
 
 echo "--- Initialisation ---"
-# On tente d'initialiser via ce manage.py maison
-# Si 'migrate' échoue, c'est que Lucterios utilise une commande custom 'lucterios_init'
-# On essaie de l'importer si elle existe dans le module management
-python3 /app/manage.py migrate --noinput || echo "Migration standard échouée, on continue..."
+# On tente l'init via le module lucterios.framework.manage directement via python -m
+# C'est souvent plus fiable que via un manage.py recréé
+python3 -m lucterios.framework.manage migrate --noinput || echo "Migrate via module échoué (normal si first run)"
 
-echo "--- Démarrage du serveur ---"
-# On lance le serveur web via Gunicorn (plus robuste) ou runserver
-# Gunicorn est installé via requirements.txt
-# On pointe vers l'application WSGI de Lucterios
+echo "--- Démarrage Gunicorn ---"
+# Lancement avec TOUTES les variables d'env explicitement passées
 exec gunicorn lucterios.framework.wsgi:application \
     --bind 0.0.0.0:${PORT:-8100} \
     --workers 2 \
+    --timeout 120 \
+    --env DJANGO_SETTINGS_MODULE=lucterios.framework.settings \
     --env LUCTERIOS_ROOT=/data/lucterios
