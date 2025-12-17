@@ -16,9 +16,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Vérifier où sont les binaires (pour le debug, optionnel)
-RUN find / -name lucterios_service
-
 # Création des dossiers pour la persistance
 RUN mkdir -p /data/lucterios
 ENV LUCTERIOS_ROOT=/data/lucterios

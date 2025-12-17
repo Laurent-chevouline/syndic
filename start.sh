@@ -4,6 +4,8 @@
 mkdir -p /data/lucterios/var
 mkdir -p /data/lucterios/conf
 
+export PATH=$PATH:/usr/local/bin:/root/.local/bin
+
 # Si c'est le premier lancement, on initialise
 # Note: lucterios_init peut demander de l'interactif, il faut parfois le forcer ou le skipper si la conf existe déjà
 if [ ! -f "/data/lucterios/conf/lucterios.xml" ]; then
