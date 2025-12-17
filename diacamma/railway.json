@@ -1,0 +1,10 @@
+{
+  "builder": "nixpacks",
+  "$schema": "https://raw.githubusercontent.com/railwayapp/nixpacks/main/schema.json",
+  "nixpacks": {
+    "providers": ["python"],
+    "python": {
+      "version": "3.11"
+    }
+  }
+}
