@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copier les fichiers du projet
-COPY setup.py setup.cfg MANIFEST.in README.rst ./
+COPY setup.py setup.cfg MANIFEST.in README.rst wsgi.py ./
 COPY diacamma/ ./diacamma/
 
 # Installer Diacamma et ses dépendances
