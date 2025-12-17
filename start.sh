@@ -1,34 +1,40 @@
 #!/bin/bash
 
-echo "--- DIAGNOSTIC STRUCTURE ---"
-# On cherche où python installe ses paquets
-SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
-echo "Dossier site-packages : $SITE_PACKAGES"
+# 1. Création des dossiers
+mkdir -p /data/lucterios/var
+mkdir -p /data/lucterios/conf
 
-echo "Listing du contenu de lucterios :"
-# On liste tout ce qui ressemble à lucterios pour trouver le vrai nom du dossier
-find $SITE_PACKAGES -maxdepth 2 -name "*lucterios*" 
+# 2. On recrée un manage.py minimaliste pour lancer Lucterios
+# C'est ce qui manque dans le package pip
+cat <<EOF > /app/manage.py
+#!/usr/bin/env python
+import os
+import sys
 
-echo "--- Listing récursif rapide ---"
-# On regarde la structure pour trouver le fichier service.py
-find $SITE_PACKAGES -name "service.py"
-find $SITE_PACKAGES -name "manage.py"
-
-echo "--- TENTATIVE DE LANCEMENT ---"
-# Si on trouve un fichier service.py, on essaie de le lancer
-SERVICE_FILE=$(find $SITE_PACKAGES -name "service.py" | grep lucterios | head -n 1)
-
-if [ -n "$SERVICE_FILE" ]; then
-    echo "Fichier service trouvé : $SERVICE_FILE"
-    export PYTHONPATH=$PYTHONPATH:$(dirname $(dirname $SERVICE_FILE))
-    echo "PYTHONPATH mis à jour : $PYTHONPATH"
+if __name__ == "__main__":
+    # Configuration par défaut pour Lucterios
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "lucterios.framework.settings")
     
-    mkdir -p /data/lucterios/var /data/lucterios/conf
-    
-    # On tente l'exécution directe
-    exec python3 "$SERVICE_FILE" --root /data/lucterios run --port ${PORT:-8100} --interface 0.0.0.0
-else
-    echo "ERREUR: Aucun fichier service.py trouvé. Contenu du dossier :"
-    ls -R $SITE_PACKAGES/lucterios* 2>/dev/null
-    sleep 30 # Pour vous laisser le temps de lire les logs avant le crash
-fi
+    # On force le chemin des fichiers de conf
+    os.environ.setdefault("LUCTERIOS_ROOT", "/data/lucterios")
+
+    from django.core.management import execute_from_command_line
+    execute_from_command_line(sys.argv)
+EOF
+
+chmod +x /app/manage.py
+
+echo "--- Initialisation ---"
+# On tente d'initialiser via ce manage.py maison
+# Si 'migrate' échoue, c'est que Lucterios utilise une commande custom 'lucterios_init'
+# On essaie de l'importer si elle existe dans le module management
+python3 /app/manage.py migrate --noinput || echo "Migration standard échouée, on continue..."
+
+echo "--- Démarrage du serveur ---"
+# On lance le serveur web via Gunicorn (plus robuste) ou runserver
+# Gunicorn est installé via requirements.txt
+# On pointe vers l'application WSGI de Lucterios
+exec gunicorn lucterios.framework.wsgi:application \
+    --bind 0.0.0.0:${PORT:-8100} \
+    --workers 2 \
+    --env LUCTERIOS_ROOT=/data/lucterios
