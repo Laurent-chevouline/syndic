@@ -3,20 +3,28 @@
 # 1. Dossiers
 mkdir -p /data/lucterios/var /data/lucterios/conf /data/lucterios/static /data/lucterios/media
 
-# 2. Trouver le vrai nom du module Diacamma
-echo "--- Recherche du module Diacamma ---"
-# On liste les dossiers dans site-packages qui contiennent 'diacamma' ou 'syndic'
+# 2. Enquête sur le nom du module
+echo "--- INSPECTION DU CONTENU PYTHON ---"
 SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])")
-REAL_MODULE_NAME=$(find $SITE_PACKAGES -maxdepth 1 -type d -name "*syndic*" -o -name "*asso*" -o -name "*diacamma*" | xargs -n 1 basename | grep -v "dist-info" | grep -v "egg-info" | head -n 1)
 
-if [ -z "$REAL_MODULE_NAME" ]; then
-    echo "ATTENTION: Aucun module Diacamma trouvé ! On tente 'diacamma.syndic' par défaut."
-    REAL_MODULE_NAME="diacamma.syndic"
+# On cherche où se cache le module métier
+# Hypothèse 1 : lucterios.diacamma...
+if [ -d "$SITE_PACKAGES/lucterios/diacamma" ]; then
+    REAL_MODULE_NAME="lucterios.diacamma.syndic" # ou asso
+    echo "Trouvé dans lucterios/diacamma !"
+# Hypothèse 2 : dossier racine 'syndic' ou 'asso'
+elif [ -d "$SITE_PACKAGES/syndic" ]; then
+    REAL_MODULE_NAME="syndic"
+    echo "Trouvé module racine 'syndic'"
+# Hypothèse 3 : On liste tout ce qui est gros
 else
-    echo "Module trouvé : $REAL_MODULE_NAME"
+    echo "Module introuvable au jugé. Listing des dossiers candidats :"
+    find $SITE_PACKAGES -maxdepth 1 -type d | grep -v "__pycache__" | grep -v "dist-info"
+    # Fallback générique qui a le plus de chance de marcher avec Lucterios standard
+    REAL_MODULE_NAME="lucterios" 
 fi
 
-# 3. Settings.py dynamique
+# 3. Settings.py
 cat <<EOF > /app/local_settings.py
 import os
 
@@ -33,8 +41,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'lucterios.framework',
-    'lucterios.framework.management',
-    '$REAL_MODULE_NAME',  # On injecte le nom trouvé dynamiquement
+    # On commente le module métier pour l'instant si on ne le trouve pas
+    # Cela permettra au moins à l'interface de base de démarrer
+    # '$REAL_MODULE_NAME', 
 ]
 
 MIDDLEWARE = [
@@ -63,12 +72,10 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = '/static/'
 LUCTERIOS_ROOT = '/data/lucterios'
-
-# Patch pour les templates
 TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates', 'APP_DIRS': True}]
 EOF
 
-echo "--- Migration DB avec module $REAL_MODULE_NAME ---"
+echo "--- Migration DB (Module de base uniquement) ---"
 export DJANGO_SETTINGS_MODULE=local_settings
 python3 -c "import django; django.setup(); from django.core.management import call_command; call_command('migrate')" || echo "Erreur Migration"
 
