@@ -1,30 +1,21 @@
-FROM python:3.11-slim
+FROM nonobis/diacamma:latest
 
-# Installation des dépendances système (nécessaires pour Lucterios/GTK/Cairo)
-RUN apt-get update && apt-get install -y \
-    libcairo2 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libgdk-pixbuf-2.0-0 \
-    libffi-dev \
-    shared-mime-info \
-    && rm -rf /var/lib/apt/lists/*
+# Définir les variables d'environnement
+ENV DIACAMMA_TYPE=syndic
+ENV DIACAMMA_ORGANISATION=aplh
+ENV DIACAMMA_DATABASE=postgresql
+ENV PORT=8100
 
-WORKDIR /app
+RUN pip install psycopg2-binary
 
-# Installation des dépendances Python
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Créer les dossiers de données
+RUN mkdir -p /var/lucterios2/aplh/var && \
+    mkdir -p /var/lucterios2/aplh/backups && \
+    mkdir -p /var/lucterios2/aplh/data && \
+    chmod -R 777 /var/lucterios2/aplh
 
-# Création des dossiers pour la persistance
-RUN mkdir -p /data/lucterios
-ENV LUCTERIOS_ROOT=/data/lucterios
-
-# Copie du script de démarrage
-COPY start.sh .
-RUN chmod +x start.sh
-
-# Port exposé par défaut (Railway injectera la variable PORT)
+# Exposer le port
 EXPOSE 8100
 
-CMD ["./start.sh"]
+# Laisser la commande de démarrage par défaut de l'image
+CMD ["gunicorn", "lucterios.framework.wsgi:application", "--bind", "0.0.0.0:8100", "--workers", "2"]
