@@ -3,16 +3,62 @@
 # 1. Dossiers
 mkdir -p /data/lucterios/var /data/lucterios/conf /data/lucterios/static /data/lucterios/media
 
-# 2. Création d'un module settings local qui surcharge tout
+# 2. Settings.py ROBUSTE (sans import * hasardeux)
 cat <<EOF > /app/local_settings.py
 import os
-from lucterios.framework.settings import *
 
-# On force la configuration qui manque
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SECRET_KEY = 'django-insecure-railway-deploy-key-change-me'
+DEBUG = True
+ALLOWED_HOSTS = ['*']
+
+# Applications installées minimales pour Lucterios
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    
+    # Modules Lucterios essentiels
+    'lucterios.framework',
+    'lucterios.framework.management', # Contient les commandes comme migrate
+    
+    # Votre module métier
+    'diacamma.syndic', # ou 'diacamma.asso'
+]
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
 ROOT_URLCONF = 'lucterios.framework.urls'
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
 WSGI_APPLICATION = 'lucterios.framework.wsgi.application'
 
-# Configuration DB forcée (SQLite pour commencer)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -20,20 +66,25 @@ DATABASES = {
     }
 }
 
-# Configuration Lucterios forcée
+LANGUAGE_CODE = 'fr-fr'
+TIME_ZONE = 'Pacific/Tahiti'
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = '/static/'
+STATIC_ROOT = '/data/lucterios/static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = '/data/lucterios/media/'
+
+# Configuration spécifique Lucterios
 LUCTERIOS_ROOT = '/data/lucterios'
-INSTALLED_APPS += ['diacamma.syndic'] # ou diacamma.asso
-ALLOWED_HOSTS = ['*']
-DEBUG = True # Pour voir les erreurs détaillées à l'écran
 EOF
 
-echo "--- Démarrage avec Settings Forcés ---"
-
-# 3. Migration (si possible)
+echo "--- Migration DB ---"
 export DJANGO_SETTINGS_MODULE=local_settings
-python3 -c "import django; django.setup(); from django.core.management import call_command; call_command('migrate')" || echo "Migrate failed"
+python3 -c "import django; django.setup(); from django.core.management import call_command; call_command('migrate')" || echo "Erreur Migration (ignorable si DB déjà init)"
 
-# 4. Lancement Gunicorn
+echo "--- Démarrage Gunicorn ---"
 exec gunicorn lucterios.framework.wsgi:application \
     --bind 0.0.0.0:${PORT:-8100} \
     --workers 2 \
