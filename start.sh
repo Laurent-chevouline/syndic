@@ -1,35 +1,29 @@
 #!/bin/bash
 
-# Préparation
 mkdir -p /data/lucterios/var
 mkdir -p /data/lucterios/conf
 
-echo "--- Debuggage des chemins ---"
-# On demande à python où est installé lucterios
-LOCATION=$(python3 -c "import lucterios; import os; print(os.path.dirname(lucterios.__file__))")
-echo "Lucterios est installé dans : $LOCATION"
+echo "--- Démarrage via Entry Points Python ---"
 
-# On construit le chemin vers le script de service
-# La structure classique est lucterios/framework/service.py
-SERVICE_SCRIPT="$LOCATION/framework/service.py"
-INIT_SCRIPT="$LOCATION/framework/manage.py"
-
-echo "Script de service cible : $SERVICE_SCRIPT"
-
-if [ ! -f "$SERVICE_SCRIPT" ]; then
-    echo "ERREUR CRITIQUE: Impossible de trouver le script service.py dans $LOCATION"
-    # Plan C : chercher n'importe quel fichier service.py dans le dossier lucterios
-    SERVICE_SCRIPT=$(find $LOCATION -name "service.py" | head -n 1)
-    echo "Recherche alternative trouvée : $SERVICE_SCRIPT"
-fi
-
-# Initialisation
+# 1. Initialisation
 if [ ! -f "/data/lucterios/conf/lucterios.xml" ]; then
     echo "Initialisation de la configuration..."
-    # On appelle le script python directement
-    python3 "$INIT_SCRIPT" init --root /data/lucterios
+    python3 -c "
+import sys
+from lucterios.framework.manage import manage_main
+sys.argv = ['manage.py', 'init', '--root', '/data/lucterios']
+manage_main()
+"
 fi
 
-echo "Démarrage du serveur..."
-# Lancement direct du fichier python
-exec python3 "$SERVICE_SCRIPT" --root /data/lucterios run --port ${PORT:-8100} --interface 0.0.0.0
+echo "Lancement du service..."
+
+# 2. Lancement du serveur
+# On simule l'appel à la ligne de commande via python
+exec python3 -c "
+import sys
+from lucterios.framework.service import service_main
+# On configure les arguments comme si on était en ligne de commande
+sys.argv = ['service.py', 'run', '--root', '/data/lucterios', '--port', '${PORT:-8100}', '--interface', '0.0.0.0']
+service_main()
+"
